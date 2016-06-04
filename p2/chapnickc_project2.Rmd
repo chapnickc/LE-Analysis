@@ -1,0 +1,98 @@
+---
+title: "Project 2"
+author: "Chad Chapnick"
+date: "March 28, 2016"
+output: html_document
+header-includes:
+- \usepackage{cases}
+- \usepackage{amsthm,amssymb}
+- \usepackage[fleqn]{amsmath}
+---
+
+```{r, echo = FALSE}
+setwd('~/Google_Drive/Saint Louis University/Spring 2016 Courses/Statistics/Project_2')
+library(ggplot2)
+```
+
+## Part 1
+Describe the scipt
+```{r, message = FALSE}
+# run the file cleaning script. The cleaned data will be stored in memory
+source('data_cleaner.R')
+```
+
+## Part 2
+#### Examining the Life Expectancy of Males
+```{r, echo = FALSE}
+p <- ggplot() +
+  geom_histogram(aes(x = LifeExp_Male),
+                 fill = '#67a9cf',
+                 color = '#262626',
+                 data = data,
+                 na.rm  = TRUE, binwidth = 4) + 
+  xlab('Life Expectancy (in Years)') + ylab('Number of Countries') +
+  ggtitle('Life Expectancy of Males')
+
+print(p)
+```
+
+
+```{r, echo = FALSE}
+par(las = 2, mar=c(9,4.5,3,1))
+p <- boxplot(data$LifeExp_Male ~ data$CONTINENT, 
+             main = 'Life Expectancy of Males', ylab = 'Age (in Years)')
+```
+```{r, echo = FALSE}
+ggplot(data) + 
+  stat_boxplot(aes(y = LifeExp_Male, x = CONTINENT, fill = CONTINENT), na.rm = TRUE) + 
+  scale_fill_manual(values = c('#7fc97f','#beaed4','#fdc086','#ffff99','#386cb0','#f0027f')) +
+  guides(fill = FALSE) + ylab('Life Expectancy (Years)') +
+  xlab('Continent') +  
+  ggtitle('Life Expectancy of Males in Each Continent') + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.title.x = element_text(size = 11.5)) 
+   
+#rows <- identify(data$LifeExp_Male ~ data$CONTINENT)
+#data[rows,1]
+```
+
+Using the ```identify()``` function, it was determined that Reunion, Haiti, Boivia, and Guyana were outliers for the life expectancy of males with respect to males in other countries on their respective continents (Africa, North America, and South America).
+
+
+```{r}
+pairs(data[, c(4, 5, 7:ncol(data))], verInd = 5)
+pairs(data[, c(4, 6:ncol(data))], verInd = 5)
+#pairs(data[, c(4, 6:12)], verInd = 5)
+pairs(data[, c(4, 12:20)], verInd = 5)
+```
+
+# Part 3
+```{r}
+source('get_WDIs.R')
+```
+
+Male life expetancy versus internet users
+
+ - http://data.worldbank.org/indicator/IT.NET.USER.P2
+ 
+```{r}
+model <- lm(data$LifeExp_Male ~ data$INET_USRS_2014)
+plot(data$LifeExp_Male ~ data$INET_USRS_2014)
+abline(model)
+summary(model)
+plot(density(model$residuals))
+```
+
+Male Life expectancy versus improved water source
+For more information:
+
+ - http://data.worldbank.org/indicator/SH.H2O.SAFE.UR.ZS
+ - http://data.worldbank.org/indicator/SH.H2O.SAFE.RU.ZS
+ 
+```{r}
+model <- lm(data$LifeExp_Male ~ data$IMPROVED_H20_SRC_2015)
+plot(data$LifeExp_Male ~ data$IMPROVED_H20_SRC_2015); abline(model)
+summary(model)
+```
+
+# -----------------------------------------------------------------------------------------

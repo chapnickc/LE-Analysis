@@ -1,0 +1,695 @@
+---
+title: |
+       | Project 3:
+       | Examining Life Expectancy of Males
+       | Using Multiple Regression 
+
+author: "Chad Chapnick"
+date: "May 2, 2016"
+output: pdf_document
+bibliography: references.bib
+csl: apa.csl
+---
+
+```{r setup, echo = FALSE, warning=FALSE, include=FALSE}
+setwd('~/Google_Drive/Saint Louis University/Spring 2016 Courses/Statistics/Project3')
+library(ggplot2, quietly = TRUE)
+library(scales, quietly = TRUE) # for pretty() and pretty_breaks()
+library(VIM, quietly = TRUE)
+library(DMwR, quietly = TRUE)
+library(ggthemes)
+library(relaimpo, quietly = TRUE)
+
+# load in the funtions and the data
+source('get_functions.R')
+load('world_data.RData')
+
+# deal with the categorical variables
+data$ISNA <- !complete.cases(data)
+
+# initialize the list to store models in the appendix
+appendix = list()
+```
+
+```{r global options, include=FALSE}
+knitr::opts_chunk$set(
+  fig.height = 4,
+  warning = FALSE,
+  message = FALSE,
+  echo = FALSE,
+  fig.pos = 'center',
+  dev = 'pdf',
+  cache=TRUE)
+options(scipen = 3, digits = 3)
+```
+
+------------------------------------------------------------------------
+
+# Introduction
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 
+Increasing life expectancy ranks as one of society's greatest achievements during the 20th century. This progressive increase in survival can be attributed to a number of factors, including a reduction in infant mortality rate, improved living styles and education, as well as advancements in health, medicine and nutrition. Although life expectancy at birth has steadily increased globally, not all regions have shared these improvements. One example of this exception is decline in life expectancy in many parts of Africa due the HIV/AIDS epidemic. According to the WHO, sub--Saharan Africa is the most affected region, with 25.8 million people living with HIV in 2014 [@WHO15].  
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+In this analysis, we consider male life expectancy at birth, a preferred health indicator in epidemiological studies [@WHO2014; @Arias09]. Using regression analysis, we attempt to build a statistical model to understand the relationship between life expectancy and a number of environmental, economic and social variables at a global level. In order to compare these countries, internationally standardized data were obtained from the Population Reference Bureau and the World Bank. These organizations are known for delivering the most current and accurate global development data from officially-recognized sources such as the United Nations, the U.S. Census Bureau, and the Organization for Economic Co-operation and Development. Featured below are five randomly sampled countries (out of 210) and the first five columns of the data set:
+
+```{r data head, results='asis', echo = FALSE}
+set.seed(777)
+knitr::kable(data[sort(sample(1:nrow(data), 6)), c(1:5)], caption = 'Sample of the Data')
+```
+
+\newpage
+# Missing Data 
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Before beginning the regression analysis, it is important to acknowledge that data availability varies by country, and there is a substantial amount of missing data in the data set. This fact raises the question of whether or not certain groups are more likely to have missing values. Moreover, could missing values be a helpful explanatory variable in modeling the life expectancy of males at birth?  One method of dealing with missing observations in regression analysis is to remove all incomplete observations and perform the oridnary-least squares (OLS) technique to estimate the coefficients of the explanatory variables using the remaining observations [@Hait68]. In fact, classical regression in `R` excludes all observations which have missing values for any variable. For this data set, there are 160 countries out of the 210 in the data frame that contain missing values for some variable. Featured below is a plot showing the amout of missing values in each variable.
+
+
+```{r MissingValues Plot, fig.height=3.8, out.width='1.5\\textwidth'}
+cols <- 4:(ncol(data)-1)
+x <- aggr(data[,cols], plot = F)$missings
+x <- x[x$Count > 0 ,]
+
+x$Variable <- factor(x$Variable, levels = x$Variable[order(-x$Count)])
+
+xlabs <- c(
+"% HIV-AIDS Male",
+"% HIV-AIDS Female",                            
+"Female Share of Nonagricultural\nWage Earners",       
+"Tertiary School Gender Parity",                      
+"% Access to Improved\nWater Source 2015",                              
+"# of Internet Users (per 100) 2014",                                     
+"Secondary School Male",                              
+"Secondary School Female",                            
+"% Married Women-Modern Contraception",
+"% Married Women-All Contraception",   
+"Maternal Deaths 1990",                               
+"Maternal Deaths 2013",                               
+"Gender Ratio Labor Force",                           
+"GNI per capita 2014",                                
+"Female Share of\nParliament Members",                 
+expression(paste("Population per ", km^{2}, "of arable land")),
+"Life Expectancy Both",                                       
+"Life Expectancy Male",                                       
+"Life Expextancy Female",                                     
+"Infant mortality rate",                              
+"Percent urban"    
+)
+
+
+colors <- colorRampPalette(c('#77e379', '#042a5c','#0088ce','#fcfefc','#c60c30'), bias = 2, alpha = 1)(21)
+  
+ggplot(x, aes(x = Variable, y = Count)) + geom_bar(stat = 'identity', color = '#06F495', alpha = 1) + theme_fivethirtyeight() +
+theme(axis.text.x = element_text(angle = 50,vjust = 0.975, hjust = 1, size = 7),
+      plot.title = element_text(hjust = 0.5, size = 12)) + xlab('') + 
+  scale_x_discrete(labels = xlabs) + guides(colour = FALSE) +
+  #scale_colour_manual(values = colors) +
+   # scale_fill_manual(values = 
+   #                  c('#ff4081','#b5ae70','#fce996','#f26f07','#a1d3f4', '#4dac26')) +
+  ggtitle('Number of Missing Observations by Development Indicator')
+
+```
+
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 
+In the era of "big data", missing values are a common problem in almost any statistical analysis. 
+By performing classical regression with the current data set, the model would be built using less than 25% of the countries and render the quality of the model inconclusive. Due to the hard work of many brilliant researchers, there are a number of imputation algorithms to replace missing values in a data set with some plausible values. However, when employing imputation algorithms we must have an understanding of the missing data mechanism in order to make reasonable assumptions. In particular, we want to know whether the missing values depend on unobserved values, or if the missingness of some observation $X$ may depend on the observed part of $X$, but not the unobserved part. Little and Rubin define these *missingness mechanisms* as Missing at Random (MAR) and Missing Not at Random (MNAR), respectively [@Little87]. Although it is impossible to determine whether a data set is MNAR through the data itself, the sample can be divided into two groups---those with missing values and those without---then a hypothesis test can be performed for a difference in the mean of the predictor variable for the two groups [@Bori13].
+
+
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 
+Accordingly, a Wilcoxon rank sum test was performed in order to determine if there was a significant difference in the average life expectancy for countries which had missing data and for those that did not. This test was chosen so as to relax the assumtion that samples were drawn from normally distributed populations with unknown population means. The results of the test are shown in table 2. The following figure is a boxplot of life expectancy of males at birth for the two groups.
+\
+
+```{r empty boxplot, include = FALSE, echo = FALSE}
+#boxplot(LifeExp_Male ~ ISNA, data = data); identify(data$LifeExp_Male ~ data$ISNA)
+```
+```{r Bool boxplot, echo = FALSE, fig.height=3.5}
+ggplot(data) + 
+  stat_boxplot(aes(y = LifeExp_Male, x = ISNA, color = ISNA), fill = '#4D4D4D', lwd = 0.9, fatten = 0.85, na.rm = TRUE) + 
+  scale_color_manual(values = c('#E36C29','#29a0e3')) +
+  scale_x_discrete(labels = c('No NA Values', 'NA Values'))+ 
+  guides(fill = FALSE, color = FALSE) + ylab('Life Expectancy (Years)') +
+  xlab('') +
+  ggtitle('Life Expectancy of Males by Case Completion') + theme_fivethirtyeight() +
+  theme(axis.text.x = element_text(angle = 0, hjust = 0.5),
+        axis.title.x = element_text(size = 11.5),
+        plot.title = element_text(hjust = 0.5, size = 12)) 
+   
+```
+```{r Bool wilcox table}
+#t <- anova(lm(LifeExp_Male ~ ISNA, data = data))
+#knitr::kable(t, caption = 'Analysis of Variance for Missing Data')
+t <- wilcox.test(LifeExp_Male ~ ISNA, data = data)
+pander::pander(t)
+```
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Lesotho, a country in Southern Africa, was identified as an outlier in the 
+group which contained NA values, with a life expectancy of 43. This country has higher infant mortality, higher death rates, and lower population growth rates due to excessive proliferation of the AIDS epidemic [@CIA2015]. The results of the wilcoxon test gave a p--value of 0.077 which, at the $\alpha = 0.05$ level, indicates that we fail to reject the null hypothesis and there is not a significant differnece in the mean of the two groups. Thus, it is reasonable to conclude that the MAR assumption is mostly fulfilled. One thing to note is that there were 50 countries without missing values and 160 countries which had one or more missing values. This may have ultimately affected the results of the test, and will be kept in mind as the analysis continues. 
+
+\newpage
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Another aspect which could contribute to male life expectancy at birth is geography. To compare the average male life expectancy across the six continents in the data set, a pairwise Wilcoxon rank sum test was performed for male life expectancy by continent.
+
+```{r Continent wilcox, results = 'asis'}
+LifeExpMale = data$LifeExp_Male; Continent = data$CONTINENT
+t <- pairwise.wilcox.test(LifeExpMale, Continent, p.adjust.method = 'bonf')
+pander::pander(t$p.value,stye= 'grid', caption = 'Pairwise Wilcoxon Rank Sum Tests')
+```
+
+From our hypothesis tests, we can conclude that at the $\alpha = 0.05$ level, geography plays a significant role in determining life expectancy in most countries.  This is not surprising considering the mean life expectancy in Africa is drastically lower.
+
+## $K$-*Nearest Neighbor Imputation*
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+To ameliorate the issue of missing data, we employ the $k$-nearest neighbor algorithm as an imputation method. The basic idea behind this method is to classify a new object, with input vector $x$, by examining the $k$ closest data set points to $x$ and assigning the object to the class that has the majority of points among these $k$ [@Hand01]. In the context of missing-value imputation, there are many ways to use the observed values of the $k$-nearest neighbors. It is commmon to use a weighted average of the values of the neighbors, where the weights are given by $e^{-d(k,x)}$ where $d(k,x)$ is the euclidean distance between the case ($x$) with NAs and the neighbour $k$ [@Torgo10]. An important drawback of this approach is that the values derived from the model are usually more orderly than the actual values. This is because the missing values are predicted from a set of attributes, so the values are likely to be consistent with the particular set of attributes. One of the benefits of $k$-nearest neighbors is that it is a non parametric lazy learning algorithm, meaning that it does not make any assumptions on the underlying data distribution.
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+The main question which arises is how to determine the parameter $k$. Steven Buechler, the chair of the Department of Applied and Computational Mathematics and Statistics at the University of Notre Dame suggests that a rule of thumb in kNN is to pick $k$ near the square root of the size of the training set [@Buechler14]. Following this notion, a reasonable $k$ value for this data set should be close to $\sqrt{210} \approx 14.5$. With this knowledge, the `knnImputation()` function in the DMwR package was used to fill in all NA values using weighted averages and a $k$ value of 15. In general, larger $k$ values such as this are less susceptible to noise in the data set when compared to single digit $k$ values.
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Before imputing the missing values, log-transformations were performed on a number of explanatory variables to reduce nonlinear relationships with our predictor variable. The relevant varaibles are listed below and a graph of male life expectancy vs. each variable (original and transformed) is shown in the supplementary material. 
+
+ - Percent of Population with Age > 65
+ - GNI per Capita in 2014 (current $US)
+ - Maternal Deaths in 1990 and in 2013
+
+<!---non parametric lazy learning? lazy means no explicit training, or does not use training to do generalization-->
+
+
+```{r Imputation and Transformation}
+data[,'Percent_of_pop_over_65'] <- log(data[,'Percent_of_pop_over_65'])
+data[,'GNI_per_capita_2014'] <- log(data[,'GNI_per_capita_2014'])
+data[,'Maternal_Deaths_1990'] <- log(data[,'Maternal_Deaths_1990'])
+data[,'Maternal_Deaths_2013'] <- log(data[,'Maternal_Deaths_2013'])
+
+cols <- 4:(ncol(data)-1)
+#cols <- cols[-c(3,4)]
+impute_df <- data[, cols] 
+imputed_df <- knnImputation(impute_df, k = 15)
+
+df <- cbind(data[, 1:3], imputed_df, data[, ncol(data)])
+colnames(df)[ncol(df)] <- 'ISNA'
+
+data <- df
+```
+
+
+# Calibration
+
+<!--First, we investigate the relationship between our explanatory variables and the response variable. '~' means desribed by 
+removed REGION and CONTINENT -->
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+We began our regression anaylsis with explanatory variables which reflect the overall health, mortality, economic development and infrastructre of a country. To begin investigating the relationship between male life expectancy at birth an our explanatory variables, a linear regression model was built using 27 of the variables in the data set (excluding continent and region). The structural model can be written as:
+$$E(Y|x_1, x_2, \dots, x_k) = \beta_0 + \beta_1 x_1 + \beta_2 x_2 + \dots + \beta_k x_k + \epsilon, \epsilon \sim Normal(0, \sigma^2)$$
+
+which is read as the expected value of the response variable given the values of the explanatory variables $x_1$ through $x_k$ [@Seltman15]. The ordinary least squares method was used to estimate the intercept, $\beta_0$ and the slopes, $\beta_i$, corresponding to each explanatory variable. 
+
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+The summary statistics of the fitted linear model are shown in tables 5-7 in the appendix. Below is a plot of actual values of life expectancy versus the values predicted by the linear model and the corresponding 95% prediction and confidence bands.
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+In regards to the residuals, the median is near zero, and the minimum and maximum are roughly equal in absolute value which offers support to the assumption of a normally distributed error term. The multiple R-squared value is 0.95 indicating that the model reasonably explains the variability of male life expectancy at birth about its mean. With respect to the coefficients estimation (table 6) it is difficult to determine the accuracy of the results. This is due in part to relationships between varaiables, known as collinearity, and to inherent uncertainty when examining multiple variables resulting from type I errors (ie. incorrectly reject a null hypothesis that is true). \
+
+\
+\
+\
+
+```{r Whole Model, echo = FALSE}
+all_fit <- lm(LifeExp_Male ~  
+Maternal_Deaths_1990 +                                     
+Maternal_Deaths_2013 +                                    
+`Percent_HIV-AIDS_Male`+
+`Percent_HIV-AIDS_Female`+
+Secondary_School_Male +                                
+Secondary_School_Female +                                    
+Tertiary_School_Gender_Parity +
+Gender_Ratio_Labor_Force +                           
+Female_Share_of_Nonagricultural_Wage_Earners +
+Female_Share_of_Parliament_Members +            
+Population_mid2015_mill +                       
+Births_per_100k_Population +                                
+Deaths_per_100k_Population +                              
+Net_migration_rate_per_100k +                              
+Pop_mid2030_mill  +                             
+Pop_mid2050_mill  +                                       
+Infant_mortality_rate +
+Total_fertility_rate  +                                   
+Percent_of_pop_under_15 +                                   
+Percent_of_pop_over_65  +                                 
+GNI_per_capita_2014 +                                 
+Percent_urban +                                     
+Population_per_Square_kilom_of_arable_land +
+Percent_of_married_women_using_all_contraception  +
+Percent_of_married_women_using_modern_contraception +       
+INET_USRS_2014 +
+IMPROVED_H20_SRC_2015,  
+data = data)
+
+# add the model to the appendix
+appendix$all_fit = all_fit
+
+# find how many variables were included in the model and how many
+# countries were included
+#length(attr(all_fit$terms, 'term.labels'))
+##nrow(model.frame(all_fit, data = data))
+```
+```{r predict whole , echo = FALSE}
+# cannot have NA's in the prediciton, also need to sort based
+# on value of life expectancy 
+sorted_df <- na.exclude(data)[order(na.exclude(data)$LifeExp_Male), ]
+
+# make prediction matrix
+c <- predict(all_fit, newdata = sorted_df, interval = 'c')
+p <- predict(all_fit, newdata = sorted_df, interval = 'p')
+
+
+# get the fitted values
+y = c[,1]
+
+# get the actual values
+x = sorted_df$LifeExp_Male
+```
+```{r predict plot, echo = FALSE}
+# --------------------------------------------------
+#  Consider adding all the points from the data frame 
+#---------------------------------------------------
+#build the plot
+ggplot(sorted_df, aes(x = c[,1], y = x)) + 
+  geom_point( size = 1) + #shape = 1, size = 2.25) +
+  geom_smooth(aes(y = c[,1], ymin=c[,2], ymax=c[,3]), 
+              color = 'black',
+              stat = 'identity', fill = '#2166ac', alpha = 0.5, lwd = 0.8) +
+  geom_line(aes(y = p[,2]), color = 'red') + 
+  geom_line(aes(y = p[,3]), color = 'red') + 
+  scale_x_continuous(breaks = pretty_breaks(n = 4)) + 
+  scale_y_continuous(breaks = pretty_breaks(n = 5)) +
+  ggtitle('Whole Model Test\nPredicted versus Actual') +
+  xlab('Predicted Life Expectancy (years)') + 
+  ylab('Actual Life Expectancy (years)') +
+  theme(axis.title.y=element_text(margin=margin(0,10, 0,10)),
+        axis.title.x=element_text(margin=margin(10,0,10,0)),
+        plot.title=element_text(margin=margin(10,0,10,0)))
+``` 
+
+
+```{r residuals, echo=FALSE, include = FALSE}
+# ------------------------------------------------------------------------
+#                      Residual plots for Whole Model
+# ------------------------------------------------------------------------
+#cols = 2; rows = 1;
+#layout(matrix(c(1:(cols*rows)), rows,cols,byrow = TRUE))
+par(mfrow = c(1,2))
+plot(all_fit, which = 1, sub = '')
+plot(all_fit, which = 2, sub = '')
+plot(all_fit, which = 3,sub = '')
+plot(all_fit, which = 5, sub = '')  
+par(mfrow = c(1,1))
+```
+
+\newpage
+## Refining the Model
+
+### *Variance Inflation Factors*
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+The absence of collinearity is a crucial assumption in multiple regression. If collinearity is ignored, the results of the anaylsis will often appear to have low significance since it increases the probability of type II errors (ie. failure to reject the null hypothesis when it is true) [@Zuur10]. <!--In addition, differences in variation could engender serious uses in the model [@Fox08].--> We mitigated this issue by considering variance inflation factors (VIFs) for the linear model. For some intuition behind this method, consider the expression for the variances of the coefficients $\beta_i$ [@Fox08]:
+$$Variance(\beta_i) = \frac{1}{1 - R_i^2} \cdot \frac{\sigma^2}{(n-1)S_i^2}$$
+
+What's important here is the first term contatining $R_i^2$, which is the variance inflation factor. The $R_i^2$ value is the $R^2$ from a linear regression model where the covariate $X_i$ is the response variable and all other covariates are used as explanatory variables [@Zuur10]. If the magnitude of $R^2$ is large, this means that the variation in $X_i$ is well accounted for by other covariates and they are highly correlated. For this analysis we used a variant of the usual VIF, called the generalized varaiance inflation factor (GVIF), which was proposed by Fox and Monette. The GVIF is essentially the VIF adjusted for the degrees of freedom (df) of the predictor varaible and is given by [@Monette92; @Rosa15]:
+
+$$GVIF = VIF^{1/(2 \cdot df)}$$
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+In this analysis, multicollinearity was reduced using the strategy suggested by Zuur, Ieno and Elphick in which the covariate with the highest VIF is sequentially dropped from the model, then the VIFs are recalculated and the process repeats until all VIFs are smaller than a predetermined threshold [@Zuur10]. However, in this case only the GVIFs were considered. 
+
+Using a cutoff value of 5, this procedure removed four variables from the model: 
+
+ - Population mid-2030 (millions)
+ - Population mid-2050 (millions)
+ - Births per 1,000 Population
+ - Secondary School Enrollment Ratio -- Females
+ 
+```{r VIFS, echo = FALSE}
+# get the reduced vif table
+reduced_vifs <- reduce_vifs(model = all_fit, df = data, 
+                            mycol = 'LifeExp_Male', cutoff = 5, trace = F)
+appendix$reduced_vifs = reduced_vifs
+```
+```{r VIF Model, echo = FALSE}
+# ---------------------------------------------------------------------------
+#           Making a linear model using variables that pass the VIF tests
+# ---------------------------------------------------------------------------
+cols <- rownames(reduced_vifs)
+
+# building the forumla
+f <- make_formula(cols, mycol = 'LifeExp_Male')
+
+# perform the regression. 
+#needed to use na.omit() for stepwise vif reduction
+fit <- lm(f, data = data)
+appendix$reduced_vif_fit = fit
+```
+
+The summary statistics for the reduced model are shown in tables 8--10.
+
+### *Stepwise Regression*
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Next, stepwise model selection was performed to determine which explanatory variables should be retained in the model and which could be dropped. In particular, we used both "backward simplification" and "forward selection" search algorithms. For backward simplification, the basic idea is to find explanatory variables whose removal does not significantly reduce the quality of the model, then those terms are removed from the formula resulting in a simplified model [@Calcagno10]. In contrast, forward selection sequentially adds variables to the model which have the most significant effects. This process is repeated until all explanatory variables included in the formula are signifcant. The stepwise-selected model was created using the `step()` function from the `stats` library in R. This function uses Akaike information criterion (AIC) to measure the quality of the model and choose the model with the best score.
+
+
+```{r Step Model, echo = FALSE}
+#step_model <- MASS::stepAIC(fit, trace = FALSE)
+step_model <- stats::step(fit, trace = FALSE)
+step_model <- lm(formula(step_model), data = data)
+appendix$step_model = step_model
+
+#ixs <- which(!(cols %in% vars1))
+#cols[ixs]
+
+```
+
+\newpage
+
+The stepwise variable selection algorithm removed the following variables: 
+
+ - Maternal Deaths in 2013
+ - Percent Males in the population with HIV-AIDS
+ - Secondary School Male
+ - Tertiary School Gender Parity
+ - Female Share of Parliament Members
+ - Population mid 2015 (millions)
+ - Percent of Population with Age < 15
+ - GNI per Capita 2014
+ - Percent Urban
+ - Population per Km$^{2}$ of Arable Land
+ - Percent of Married Women Using All Contraception
+ - Percent of Population with Access to Improved Water sources (2015)
+ 
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+By performing this step, we are making the hypothesis that the omitted coefficients are not statistically significant from zero. It is important to determine if this is in fact true. This can be done by comparing the sum squared error from the reduced model with that of the full model using `R`'s anova function with nested linear models. The results of the hypothesis test are shown below in table 4 where the null and alternative hypotheses are respectively $H_0 : \beta = 0$ and $H_a : \beta \neq 0$ for all the omitted terms. The results of the test show a p--value of approximately 0.788 indicating that we fail to reject the null hypothesis and the omitted coefficients are not statistically signifcant from zero.
+
+```{r Anova Table}
+pander::pander(anova(all_fit, step_model))
+```
+
+## *Further Variable Selection*
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+A linear regression model was created using the 11 remaining variables. The summary statistics are shown in tables 11--13 in the appendix. In general, the results indicate that we should reject the null hypothesis, $H_0 : \beta_i = 0$ for the explanatory variables ($x_i$s) included in the mixed stepwise regression model. 
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+In order to find the explanatory variables which best explain male life expectancy at birth at a gloabl scale, the "lmg" metric (named after its authors) was calculated for the remaining variables using the `calc.relimp()` function from the `relaimpo` package in R. This metric gives an averaging of the $R^{2}$ contribution obtained from all possible orderings of the predictors and has recently been adopted by many researchers [@Gromping06]. 
+
+
+\
+```{r LMG calculation}
+cri <- calc.relimp(step_model)
+
+lmg_scores <- attr(cri, 'lmg')
+lmg_rank <- attr(cri, 'lmg.rank')
+
+lmg_scores <- lmg_scores[order(lmg_rank)]
+lmg_scores <- data.frame(name = names(lmg_scores), percent = as.numeric(lmg_scores));
+
+lmg_scores$name <- factor(lmg_scores$name, levels = lmg_scores$name[order(-lmg_scores$percent)])
+
+```
+```{r LMG Plot}
+
+xlabs = c(
+'Infant Mortality Rate',
+'Maternal Deaths in 1990',
+'% HIV-AIDS Female',
+'Deaths per 1,000',
+'# of Internet Users in 2014',
+'Total Fertility Rate',
+'Percent of Population over 65',
+'Percent of Married Women\nUsing Modern Contraception',
+'Female Share of Nonacgricultural\nWage Earners',
+'Gender Ratio of Labor Force',
+'Net Migration Rate per 1,000'
+  
+)
+
+
+ggplot(lmg_scores, aes(x = name, y = percent)) + geom_bar(stat = 'identity', color = '#CE57E4')+  ylab('% of Response Variance') +
+theme(axis.text.x = element_text(angle = 45, hjust = 1.05, size = 7),
+      axis.title.y = element_text(size = 10),
+      plot.title = element_text(hjust = 0.5, size = 12)) + xlab('') + 
+  guides(colour = FALSE)  + scale_x_discrete(labels = xlabs) +
+  ggtitle('Relative Importances for Male Life Expectancy at Birth') 
+```
+```{r, Removal by LMG and p--value}
+
+remove_var <- function(model, var, mycol = "LifeExp_Male", data){
+  vars <- attr(model$terms, 'term.labels')
+  ix <- which(vars == var)
+  vars <- vars[-ix]
+  
+  f <- make_formula(vars, mycol = mycol)
+  fit <- lm(f, data = data)
+  return(fit)
+}
+
+fit <- remove_var(step_model, "Percent_of_married_women_using_modern_contraception", data = data)
+
+fit <- remove_var(fit, 'Net_migration_rate_per_100k', data = data)
+fit <- remove_var(fit, 'Female_Share_of_Nonagricultural_Wage_Earners', data = data)
+fit <- remove_var(fit, 'Gender_Ratio_Labor_Force', data = data)
+#fit <- remove_var(fit, 'Total_fertility_rate', data = data)
+
+appendix$final_fit = fit
+```
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Explanatory variables with relative contributions less than 10% to the coefficient of determination ($R^2$) were removed from the model in order to focus on variables most relevant to the predictor variable. One exception here was the percent of the population over 65, with an lmg value of 0.0936. The choice to retain this variable was due to it's very low p--value in the stepwise model summary (shown in table 12) which strongly suggests that it has a nonzero coefficient $\beta$. In constrast, the p--values for the variables removed in the step were all greater than 0.05, with the exception of the female share of nonagricultural wage earners, which was slightly less than the $\alpha$ value. Thus, the variables included in the final regression model were:
+
+ - Maternal Deaths in 1990
+ - Percent HIV--AIDS Female
+ - Deaths per 1,000 Individuals
+ - Infant Mortality Rate
+ - Percent of Population over 65
+ - Total Fertility Rate
+ - Number of Internet Users in 2014
+
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Intuitively, these explanatory variables seem reasonable and the sign of the coefficients (as shown in table 15) offer further support to their logical interpretation. For example, there is a negative relationship between the number of deaths per 1,000 individuals and the life expectancy of males at birth, a straightforward result. The variable with the largest coefficient is the percent of the population over 65. It is conceivable that if a country has a high proportion of older individuals this would reveal a great deal about the country as a whole. Aside from the promise of a longer life, an elderly population could help raise the younger generation and allow middle age adults to focus on raising their family and improving living conditions.
+
+  
+
+```{r Residuals, out.extra='angle=90', out.height = '2\\linewidth', out.width = '1.4\\textwidth', fig.width = 12,fig.height=9,echo=FALSE}
+par(mfrow = c(2,2))
+plot(fit, which = 1)
+plot(fit, which = 2)
+plot(fit, which = 3)
+plot(fit, which = 5)
+par(mfrow=c(1,1))
+```
+
+
+## *Residuals*
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+One useful metric to asses the quality of the regression model is to check the residuals. These are defined as the deviation of an outcome from the predicated mean value for all observations with the same value for the explanatory variable [@Seltman15]. 
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+The plot of residuals vs. fitted gives some information about the linearity and equal variance assumptions. If there is a distinct U--shape, this could mean there is a lurking variable, higher order terms are needed in the model, or perhaps the assumption of constant variance is violated.  With repsect to the residuals vs. fitted plot on the previous page, there are no obvious issues. It is worth mentioning that Andorra, San Marino, and Cambodia have relatiely high residuals. 
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Next, the normal Q-Q plot can help check the assumption that the error term $\epsilon$ is normally distributed. For our model, the normal--quantile plot appears to have slightly heavy tails and Andorra, San Marino, and Cambodia again do not follow the trend. Based on this plot, the residuals seem to be overall normally distributed. 
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+The scale--location plot helps to check the assumption of a constant variance, $\sigma^2$. If this plot has a distinct linear trend, this would indicate variance increases for the fitted values and the validity of the p--values is low. For our model, the square root of the standardized residuals appears to be approximately constant, however as the fitted values increase there is a slightly negative linear trend and we still observe the same three outliers. Due to the fact that this trend only occurs for a small range of values near the upper extreme this is not of deep concern.
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Lastly, we consider the standardized residuals vs leverage plot. This plot allows one to see if there are any data points which exert a coefficient--altering effect on the model. The intuition behind this comes from the nature of OLS which seeks to minimize the vertical distances between the data and the line. If there is an extreme value in the sample, the squared penalty term will result in that point having greater leverage and the regression line will be fit such that it is closer to that point. The metric we used for this analysis is Cook's distance, which is essentially a measure of how far the predicted values would move if the data point in question were removed. The general rule of thumb is that if a point has a value of Cook's distance greater than 0.5, it is said to have high leverage. For our model, all points have Cook's distance values less than 0.5, and thus have relatively low leverage.
+
+
+```{r Other pred model?, include = FALSE,echo = FALSE}
+# --------------------------------------------------------------
+#                      Variable selection
+# --------------------------------------------------------------
+# vars <- attr(step_model$terms, 'term.labels')
+# 
+# f <- as.formula('LifeExp_Male ~ Deaths_per_100k_Population + Percent_of_pop_over_65')
+# fit <- lm(f, data = data)
+# #summary(fit)
+# 
+# 
+# # get the data frame used to fit the model 
+# fit_df <- model.frame(fit, data = data)
+# 
+# # sort the data frame for the prediction
+# fit_df <- fit_df[with(fit_df, order(LifeExp_Male)), ]
+# 
+# # build the prediction matrix
+# p <- predict(fit, newdata = fit_df, interval = 'c')
+# 
+# # get the fitted values
+# x = p[,1]
+# 
+# # get the actual values
+# y = fit_df$LifeExp_Male
+
+#build the plot
+# ggplot(fit_df, aes(x = x)) + 
+#   geom_point(aes(y = y), size = 1.5) + #shape = 1, size = 2.25) +
+#   geom_smooth(aes(y = p[,1], ymin=p[,2], ymax=p[,3]), 
+#               stat = 'identity', fill = 'limegreen', alpha = 0.25) +
+#   scale_x_continuous(breaks = pretty_breaks(n = 4)) + 
+#   scale_y_continuous(breaks = pretty_breaks(n = 5)) +
+# #  ggtitle('Whole Model Test\nActual versus Predicted') +
+#   xlab('Predicted Life Expectancy (years)') + 
+#   ylab('Actual Life Expectancy (years)') +
+#   theme(axis.title.y = element_text(margin=margin(0,10, 0,10)),
+#         axis.title.x = element_text(margin=margin(10,0,10,0)),
+#         plot.title = element_text(margin=margin(10,0,10,0)))
+
+# plot(fit)
+```
+
+
+\newpage
+# Prediction
+
+```{r Grab Indicators}
+# maternal deaths in 1990 = http://data.worldbank.org/indicator/SH.STA.MMRT use 1990
+# 
+# Percent HIV--AIDS Female = http://data.worldbank.org/indicator/SH.HIV.1524.FE.ZS 2014 is good
+# Deaths per 100k Individuals  = http://data.worldbank.org/indicator/SP.DYN.CDRT.IN
+# Infant Mortality Rate = http://data.worldbank.org/indicator/SP.DYN.IMRT.IN
+# total fertility rate = http://data.worldbank.org/indicator/SP.DYN.TFRT.IN
+# Percent of Population over 65 = http://data.worldbank.org/indicator/SP.POP.65UP.TO.ZS
+# Number of Internet Users in 2014 = http://data.worldbank.org/indicator/IT.NET.USER.P2 use 2013
+
+pred_df <- read.csv('newdata.csv')
+#pred_df <- pred_df[35:nrow(pred_df),]; rownames(pred_df) <- 1:nrow(pred_df)
+col <- which(colnames(pred_df) == 'Percent_HIV.AIDS_Female')
+colnames(pred_df)[col] <- 'Percent_HIV-AIDS_Female'
+
+source('convert_levels.R')
+pred_df$`Percent_HIV-AIDS_Female` <- convert_levels(pred_df$`Percent_HIV-AIDS_Female`,c(0, 0.099, 0.25, 0.5, 1, 5, 50))
+
+pred_df$Percent_of_pop_over_65 = log(pred_df$Percent_of_pop_over_65)
+pred_df$Maternal_Deaths_1990 = log(pred_df$Maternal_Deaths_1990)
+
+pred_df <- pred_df[complete.cases(pred_df), ]
+pred_df <- pred_df[order(pred_df[,1]),]
+
+rownames(pred_df) <- 1:nrow(pred_df)
+```
+```{r Prediction and Confidence}
+fit_predict <- predict(fit, newdata = pred_df, interval = 'pre')
+fit_predict <- as.data.frame(fit_predict)
+
+fit_conf <- predict(fit, newdata = pred_df, interval = 'c')
+fit_conf <- as.data.frame(fit_conf)
+```
+```{r Prediction Plot, fig.width=9.5, fig.height=5}
+x <- pred_df$LifeExp_Male
+
+g.pred <- ggplot(fit_conf, aes(x = fit, y =x)) +
+  geom_point() +
+  #geom_line(aes(y = lwr)) + geom_line(aes(y = upr)) + geom_line(aes(y=x))
+  geom_smooth(aes(y = fit, ymin = lwr, ymax = upr), stat = "identity", fill = '#f68c06', color = '#181818', alpha = 0.6, lwd = 0.8) +
+  geom_line(aes(y = fit_predict[, 2]), color = '#325da7', lwd = 0.95) + 
+  geom_line(aes(y = fit_predict[, 3]), color = '#325da7', lwd = 0.95) + 
+  scale_x_continuous(breaks = pretty_breaks(n = 4)) + 
+  scale_y_continuous(breaks = pretty_breaks(n = 5)) +
+  ggtitle('Final Model Test\nPredicted versus Actual') +
+  xlab('Predicted Life Expectancy (years)') + 
+  ylab('Actual Life Expectancy (years)') +
+  theme(axis.title.y=element_text(margin=margin(0,10, 0,10)),
+        axis.title.x=element_text(margin=margin(10,0,10,0)),
+        plot.title=element_text(margin=margin(10,0,10,0)))
+g.pred
+```
+
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+A crucial point in determining the quality of our model was assessing its ability to accurately predict values for male life expectancy at birth given empirical data from several random nations. Supplementary data were obtained from the World Bank collection of development indicators. This international organization is known for delivering the most current and accurate global development data from officially-recognized sources [@WBG16]. The data were downloaded using a Python script, for which the code is available, which implements the `wbdata` module from the Python package index. One important difference here is that the data obtained for *percent HIV--AIDS female*, *deaths per 1,000 individuals*, *infant mortality rate*, *total fertility rate*, and *percent of population over 65* were for 2014 as opposed to 2015. In addition, the data obtained for the number of internet users was for 2013 to stay consistent and maternal deaths were kept for the year 1990, since data from previous years were not available. It is important to note that the units of measurement were the same and logarithmic transformations were performed on the relevant variables, so valid comaprisons could be made. 
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Using the final linear regression model and the supplementary data, estimates for the fitted values were obtained using the `predict()` function in R. In addition, prediction bands and confidence bands of 95% were constructed for these predicted values to see how well the model holds and to help determine if in fact we can predict the average life expectancy of an citizen based on the characteristics of the nation. The above figure shows the predicted life expectancy values versus the actual life expectancy values for the data obtained from the World Bank. In general, the predicted values fall within the 95% prediction intervals, with the exception of the Syrian Arab Republic which fell slightly outside. On the whole, these results further highlight the ability of our regression model to forecast life expectancy given the seven parameters. 
+
+<!--27, 105, 114 fell outside of the pred intervals?-->
+
+# Conclusion
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+In the final regression model the seven remaining explanatory variables were: *percent HIV--AIDS female*, *deaths per 1,000 individuals*, *infant mortality rate*, and *percent of population over 65*, *number of internet users*, *maternal deaths in 1990*, and *total fertility rate*. All of these indicators were significant (shown in table 15) and accounted for approximately 94% of the variance in male life expectancy at birth at a global level. This underscores the fact that life expectancy is meaningfully determined by infrastructure, social development, and illness---and that to improve the life expectancy in developing regions we must assist them in these critical issues.   
+
+<!--------------------------------------------------------------------->
+
+\newpage
+
+# Appendix
+#### *Note: some values (p-values in particular) are altered due to formatting issues*
+
+```{r, results='asis', echo = FALSE}
+all_fit = NULL
+
+all_fit = appendix$all_fit
+summary_table(all_fit, title = 'Whole Model')
+#anova_table(all_fit, title = 'Whole Model')
+
+reduced_vif_fit = appendix$reduced_vif_fit
+summary_table(reduced_vif_fit, title = 'Reduced VIF Model')
+#anova_table(reduced_vif_fit, title = 'Reduced VIF Model')
+#anova_table_2(all_fit, reduced_vif_fit, title = 'Comparison of Whole and Reduced VIF Models')
+
+
+step_model = appendix$step_model
+
+summary_table(step_model, title = 'Stepwise Model')
+```
+
+\newpage
+```{r, results = 'asis'}
+final_fit = appendix$final_fit
+summary_table(final_fit, title = 'Final Regression Model')
+#anova_table(step_model, title = 'Stepwise Model')
+#anova_table_2(step_model, all_fit)
+```
+
+# Supplementary Material
+
+```{r Transformation Plots, out.extra='angle=90', out.height = '3\\linewidth', out.width = '1.1\\textwidth', fig.width =10,fig.height=9,echo=FALSE}
+par(mfrow = c(4,2),  mai = c(0.53,0.25,0.3,0.1))
+# reverse transform then transformed
+plot(LifeExp_Male ~ I(exp(Percent_of_pop_over_65)), 
+     xlab = '% of Population over 65',
+     main = 'Original',
+     data = data)
+plot(LifeExp_Male ~ Percent_of_pop_over_65,
+     yaxt = 'n',xlab = 'log(% of Population of 65)', 
+     main = 'Transformed',
+     data = data)
+
+
+# reverse transform then transform
+plot(LifeExp_Male ~ I(exp(GNI_per_capita_2014)),xlab = 'GNI per Capita 2014', data = data)
+plot(LifeExp_Male ~ GNI_per_capita_2014, yaxt = 'n',xlab = 'log(GNI per Capita 2014)', data = data)
+
+
+# reverse transform then transform
+plot(LifeExp_Male ~ I(exp(Maternal_Deaths_1990)),xlab = 'Maternal Deaths 1990', data = data)
+plot(LifeExp_Male ~ Maternal_Deaths_1990, yaxt= 'n',xlab = 'log(Maternal Deaths 1990)', data = data)
+
+
+plot(LifeExp_Male ~ I(exp(Maternal_Deaths_2013)),xlab = 'Maternal Deaths 2013', data = data)
+plot(LifeExp_Male ~ Maternal_Deaths_2013, yaxt = 'n',xlab = 'log(Maternal Deaths 2013)', data = data)
+
+```
+
+\newpage
+# References
+
+
+

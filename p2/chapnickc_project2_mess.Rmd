@@ -1,0 +1,175 @@
+---
+title: "Project 2"
+author: "Chad Chapnick"
+date: "March 28, 2016"
+output: html_document
+header-includes:
+- \usepackage{cases}
+- \usepackage{amsthm,amssymb}
+- \usepackage[fleqn]{amsmath}
+---
+
+```{r, echo = FALSE}
+setwd('~/Google_Drive/Saint Louis University/Spring 2016 Courses/Statistics/Project_2')
+library(ggplot2)
+```
+
+## Part 1
+Describe the scipt
+```{r, message = FALSE}
+# run the file cleaning script. The cleaned data will be stored in memory
+source('data_cleaner.R')
+```
+
+## Part 2
+#### Examining the Life Expectancy of Males
+```{r, echo = FALSE}
+p <- ggplot() +
+  geom_histogram(aes(x = LifeExp_Male),
+                 fill = '#67a9cf',
+                 color = '#262626',
+                 data = data,
+                 na.rm  = TRUE, binwidth = 4) + 
+  xlab('Life Expectancy (in Years)') + ylab('Number of Countries') +
+  ggtitle('Life Expectancy of Males')
+
+print(p)
+```
+
+
+```{r, echo = FALSE}
+# ggplot(data) + 
+#   stat_boxplot(aes(y = LifeExp_Male, x = CONTINENT), na.rm = TRUE)
+
+```
+
+```{r, echo = FALSE}
+par(las = 2, mar=c(9,4.5,3,1))
+p <- boxplot(data$LifeExp_Male ~ data$CONTINENT, 
+             main = 'Life Expectancy of Males', ylab = 'Age (in Years)')
+
+#rows <- identify(data$LifeExp_Male ~ data$CONTINENT)
+#data[rows,1]
+```
+
+Using the ```identify()``` function, it was determined that Reunion, Haiti, Boivia, and Guyana were outliers for the life expectancy of males with respect to males in other countries on their respective continents (Africa, North America, and South America).
+
+
+```{r}
+pairs(data[, c(4, 5, 7:ncol(data))], verInd = 5)
+pairs(data[, c(4, 6:ncol(data))], verInd = 5)
+
+
+#matplot(data[,'LifeExp_Male'],data[,c(4,5,7)] , type = 'l', lty = 1)
+
+plot(data$LifeExp_Male ~ data$LifeExp_Both)
+plot(data$LifeExp_Male[-122] ~ data$LifeExp_Female[-122]);# identify(data$LifeExp_Male ~ data$LifeExp_Female)
+plot(data$LifeExp_Male ~ data$Maternal_Deaths_1990)
+#plot(data$LifeExp_Male ~ as.numeric(as.character(data$Maternal_Deaths_2013)))
+#plot(data$LifeExp_Male ~ as.numeric(as.character(data$Percent_HIV_AIDS_Male)))
+plot(data$LifeExp_Male ~ data$Secondary_School_Male)
+plot(data$LifeExp_Male ~ data$Secondary_School_Female)
+plot(data$LifeExp_Male ~ data$Tertiary_School_Gender_Parity)
+plot(data$LifeExp_Male ~ data$Gender_Ratio_Labor_Force)
+
+plot(data$LifeExp_Male[-122] ~ data$Gender_Ratio_Labor_Force[-122]);# identify(data$LifeExp_Male ~ data$Gender_Ratio_Labor_Force)
+
+
+plot(data$LifeExp_Male ~ data$Female_Share_of_Nonagricultural_Wage_Earners)
+plot(data$LifeExp_Male ~ data$Female_Share_of_Parliament_Members)
+plot(data$LifeExp_Male ~ data$Population_mid2015_mill); 
+plot(data$LifeExp_Male ~ data$Births_per_100k_Population)
+plot(data$LifeExp_Male ~ data$Deaths_per_100k_Population)
+plot(data$LifeExp_Male ~ data$Net_migration_rate_per_100k)
+plot(data$LifeExp_Male ~ data$Pop_mid2030_mill)
+plot(data$LifeExp_Male ~ data$Pop_mid2050_mill)
+plot(data$LifeExp_Male ~ data$Infant_mortality_rate)
+plot(data$LifeExp_Male ~ data$Total_fertility_rate)
+plot(data$LifeExp_Male ~ data$Percent_of_pop_under_15)
+plot(data$LifeExp_Male ~ data$Percent_of_pop_over_65)
+plot(data$LifeExp_Male ~ data$GNI_per_capita_2014)
+plot(data$LifeExp_Male ~ data$Percent_urban)
+plot(data$LifeExp_Male ~ data$Population_per_Square_kilom_of_arable_land)
+plot(data$LifeExp_Male ~ data$Percent_of_married_women_using_all_contraception)
+plot(data$LifeExp_Male ~ data$Percent_of_married_women_using_modern_contraception)
+
+```
+
+# Part 3
+
+? use power.transfrom() to find the best transform
+```{r}
+rows <- which(is.na(data$WBI))
+rows <- c(rows, 164)
+
+
+model <- lm(data$LifeExp_Male[-rows] ~ data$WBI[-rows])
+plot(data$LifeExp_Male[-rows] ~ data$WBI[-rows]) 
+plot(data$LifeExp_Male[data$WBI < 10] ~ data$WBI[data$WBI < 10])
+plot(data$LifeExp_Male ~ data$WBI)
+
+identify(data$LifeExp_Male ~ data$WBI)
+
+identify(data$LifeExp_Male[-rows] ~ data$WBI[-rows])
+model <- lm(data$LifeExp_Male[data$WBI < 10] ~ data$WBI[data$WBI < 10])
+abline(model)
+summary(model)
+
+# log-log scale
+model <- lm(log(data$LifeExp_Male[-rows]) ~ log(data$WBI[-rows]))
+plot(log(data$LifeExp_Male[-rows]) ~ log(data$WBI[-rows]))
+abline(model)
+
+summary(model)
+```
+
+```{r}
+plot(density(model$residuals))
+```
+
+```{r, echo = FALSE}
+#max(data$LifeExp_Male, na.rm = TRUE)
+#min(data$LifeExp_Male, na.rm = TRUE)
+
+#steps <-  round((84-43)/170,7)
+#steps <- (4.5-0)/170
+#LifeExp_New <- data.frame(life_exp = log(seq(0, 4.5, 0.02647059)))
+#LifeExp_mat <- predict(model, newdata = LifeExp_New, interval = 'c')
+# 
+# model <- lm(log(data$LifeExp_Male[-rows]) ~ log(data$WBI[-rows]))
+# plot(log(data$LifeExp_Male[-rows]) ~ log(data$WBI[-rows]), ylim = range(log(data$LifeExp_Male[-rows]), LifeExp_mat, na.rm = TRUE))
+# abline(model)
+#matlines(LifeExp_New$life_exp, LifeExp_mat, lty = c(1,2,2), col = c(1,2,2))
+
+
+```
+
+
+```{r}
+# internet-- keep
+model <- lm(data$LifeExp_Male ~ data$WBI3)
+summary(model)
+
+plot(data$LifeExp_Male ~ data$WBI3); abline(model)
+```
+
+```{r}
+
+model <- lm(data$LifeExp_Male ~ data$WBI4)
+summary(model)
+plot(data$LifeExp_Male ~ data$WBI4); abline(model)
+plot(model)
+```
+
+```{r}
+library(car)
+?powerTransform
+a <- powerTransform(model)
+summary(a)
+
+f <- boxCox(model, family = 'yjPower')
+transformed <- yjPower(data$LifeExp_Male, 2)
+mod2 <- lm(transformed ~ data$WBI4)
+plot(transformed ~ data$WBI4); abline(mod2)
+plot(mod2)
+# -----------------------------------------------------------------------------------------
