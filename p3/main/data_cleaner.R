@@ -1,19 +1,13 @@
 library(zoo) # using the na.locf() function
+# setwd('~/Google_Drive/Saint Louis University/Spring 2016 Courses/Statistics/Project_2')
 
-#setwd('~/Google_Drive/Saint Louis University/Spring 2016 Courses/Statistics/Project_2')
-setwd('/home/chapnick/Dropbox/Project2')
 # load in the data
 data <- read.csv(file = '2015-World-Data - Sheet1.csv', stringsAsFactors = FALSE)
 
-#==================================================================
-#                         Notes
-#=================================================================
-# - we have lost the data on the WORLD row
-# - how should we divide OCEANIA... as a region or a continent?
 
-#=================================================================
-#           Providing meaningful column names
-#=================================================================
+#------------------------------------------
+#   Relabel the columns appropriately
+#------------------------------------------
 labels <- c('',
             'LifeExp_Both',
             'LifeExp_Male',
@@ -28,7 +22,6 @@ labels <- c('',
             'Gender_Ratio_Labor_Force',
             'Female_Share_of_Nonagricultural_Wage_Earners',
             'Female_Share_of_Parliament_Members',
-            
             'Population_mid2015_mill',
             'Births_per_100k_Population',
             'Deaths_per_100k_Population',
@@ -45,20 +38,15 @@ labels <- c('',
             'Percent_of_married_women_using_all_contraception',
             'Percent_of_married_women_using_modern_contraception'
 )
-
 colnames(data) <- labels
 
-#=================================================================
-#         Converting the NA symbols
-#=================================================================
-# replace all the Ñ values with NA
-data[data == 'Ñ'] <- NA
+data[data == 'Ñ'] <- NA # replace all the Ñ values with NA
 
+#---------------------------------------------
+#         Fix the Bangldesh data
+#---------------------------------------------
 
-
-#=================================================================
-#         Fix the bangldesh row 
-#=================================================================
+# grab the index of Banladesh
 bangladesh_row <- which(data[,1] == 'Bangladesh')
 
 cols <- seq(13, 3, -1)
@@ -71,13 +59,11 @@ data[bangladesh_row,'Female_Share_of_Parliament_Members'] <- 20
 data[bangladesh_row, 'Tertiary_School_Gender_Parity'] <- 0.72
 
 
+#---------------------------------------------------------
+#       Creating a "Region" Variable (categorical) 
+#---------------------------------------------------------
 
-
-#=================================================================
-#           Creating a region categorical variable
-#=================================================================
-
-# get the rows which correspond to the region labels. They are in all caps.
+# Find the unique region names
 major_rows = c()
 for (row in 1:nrow(data)){
 
@@ -251,9 +237,9 @@ write.csv(region_df, file = '2015_Region_Data.csv', row.names = FALSE)
 write.csv(continent_df, file = '2015_Continent_Data.csv', row.names = FALSE)
 
 
-#=============================================================
-#             Removing Unneded Objects from Memory
-#=============================================================
+#-----------------------------------------------------------
+#                   Garbage Collection
+#-----------------------------------------------------------
 keep_objs <- c('data', 'region_df', 'continent_df')
 
 # get the indicies
@@ -269,3 +255,4 @@ rm_objs <- ls()[-keep_ix]
 # remove them
 rm(list = rm_objs)
 rm(rm_objs)
+
