@@ -1,15 +1,9 @@
 library(zoo) # using the na.locf() function
 
-setwd('~/Google_Drive/Saint Louis University/Spring 2016 Courses/Statistics/Project_2')
+#setwd('')
 
 # load in the data
 data <- read.csv(file = '2015-World-Data - Sheet1.csv')
-
-#==================================================================
-#                         Notes
-#=================================================================
-# - we have lost the data on the WORLD row
-# - how should we divide OCEANIA... as a region or a continent?
 
 #=================================================================
 #           Providing meaningful column names
